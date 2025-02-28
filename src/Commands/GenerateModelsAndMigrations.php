@@ -383,9 +383,34 @@ class GenerateModelsAndMigrations extends Command
             }
         }
 
-        // Check if primary key
+        // Check if primary key and auto increment
         if ($this->isPrimaryKey($table, $column)) {
-            $definition .= "->primary()";
+            if ($this->isAutoIncrement($table, $column)) {
+                // For auto-incrementing primary keys, we should use methods like
+                // increments(), bigIncrements(), etc. instead of ->primary()
+                if (strpos($definition, "integer('{$column}')") !== false) {
+                    // Replace the integer definition with increments
+                    $definition = str_replace("integer('{$column}')", "increments('{$column}')", $definition);
+                } else if (strpos($definition, "bigInteger('{$column}')") !== false) {
+                    // Replace the bigInteger definition with bigIncrements
+                    $definition = str_replace("bigInteger('{$column}')", "bigIncrements('{$column}')", $definition);
+                } else if (strpos($definition, "smallInteger('{$column}')") !== false) {
+                    // Replace the smallInteger definition with smallIncrements
+                    $definition = str_replace("smallInteger('{$column}')", "smallIncrements('{$column}')", $definition);
+                } else if (strpos($definition, "mediumInteger('{$column}')") !== false) {
+                    // Replace the mediumInteger definition with mediumIncrements
+                    $definition = str_replace("mediumInteger('{$column}')", "mediumIncrements('{$column}')", $definition);
+                } else if (strpos($definition, "tinyInteger('{$column}')") !== false) {
+                    // Replace the tinyInteger definition with tinyIncrements
+                    $definition = str_replace("tinyInteger('{$column}')", "tinyIncrements('{$column}')", $definition);
+                } else {
+                    // For other types, add autoIncrement()
+                    $definition .= "->autoIncrement()->primary()";
+                }
+            } else {
+                // Non-auto-incrementing primary key
+                $definition .= "->primary()";
+            }
         }
 
         // Check if unique
@@ -1059,5 +1084,43 @@ class GenerateModelsAndMigrations extends Command
         $content .= "}\n";
 
         return $content;
+    }
+
+    protected function isAutoIncrement($table, $column)
+    {
+        $connection = DB::connection($this->connection);
+
+        switch ($connection->getDriverName()) {
+            case 'mysql':
+                $columnInfo = $this->getColumnInfo($table, $column);
+                return isset($columnInfo->Extra) && strpos($columnInfo->Extra, 'auto_increment') !== false;
+
+            case 'pgsql':
+                // In PostgreSQL, check for sequences
+                $result = $connection->select("
+                    SELECT pg_get_serial_sequence(?, ?) IS NOT NULL as is_serial
+                ", [$table, $column]);
+                return !empty($result) && $result[0]->is_serial;
+
+            case 'sqlite':
+                // In SQLite, check for AUTOINCREMENT keyword in table creation SQL
+                $result = $connection->select("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", [$table]);
+                if (!empty($result)) {
+                    $tableSql = $result[0]->sql;
+                    // Look for column definition with AUTOINCREMENT
+                    return preg_match("/[`\"\[]?{$column}[`\"\]]?.*AUTOINCREMENT/i", $tableSql) === 1;
+                }
+                return false;
+
+            case 'sqlsrv':
+                // In SQL Server, check for IDENTITY property
+                $result = $connection->select("
+                    SELECT COLUMNPROPERTY(OBJECT_ID(?), ?, 'IsIdentity') as is_identity
+                ", [$table, $column]);
+                return !empty($result) && $result[0]->is_identity == 1;
+
+            default:
+                return false;
+        }
     }
 }
