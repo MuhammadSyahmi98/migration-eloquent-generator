@@ -68,7 +68,7 @@ php artisan generate:models-migrations --ignore=cache,logs,temp_data
 Use a different database connection:
 
 ```bash
-php artisan generate:models-migrations --connection=legacy
+php artisan generate:models-migrations --connection=mysql
 ```
 
 Specify custom paths:
@@ -88,11 +88,7 @@ php artisan generate:models-migrations --path-model=app/Models/Generated --path-
 ## Requirements
 
 - PHP ^7.3|^8.0
-- Laravel ^8.0|^9.0|^10.0
-
-## License
-
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+- Laravel ^8.0|^9.0|^10.0|^11.0
 
 ## Author
 
