@@ -193,7 +193,7 @@ class GenerateModelsAndMigrations extends Command
 
     protected function generateSplitMigrations($table, $columns, $maxColumnsPerMigration)
     {
-        $migrationPath = base_path($this->option('path-migration'));
+        $migrationPath = base_path(config('database-to-model.paths.migration') ?? 'database/migrations');
         $chunks = array_chunk($columns, $maxColumnsPerMigration);
 
         // First migration creates the table with essential columns
@@ -1008,7 +1008,7 @@ class GenerateModelsAndMigrations extends Command
     protected function generateForeignKeyMigration($tables)
     {
         $className = 'AddForeignKeysToAllTables';
-        $migrationPath = base_path($this->option('path-migration'));
+        $migrationPath = base_path(config('database-to-model.paths.migration') ?? 'database/migrations');
 
         $timestamp = date('Y_m_d_His');
         $filename = "{$timestamp}_add_foreign_keys_to_all_tables.php";
