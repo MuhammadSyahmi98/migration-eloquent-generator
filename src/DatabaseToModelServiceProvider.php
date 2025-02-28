@@ -16,6 +16,12 @@ class DatabaseToModelServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(
             __DIR__.'/../config/database-to-model.php', 'database-to-model'
         );
+        
+        // Check for duplicate command file
+        $duplicateFile = app_path('Console/Commands/GenerateModelsAndMigrations.php');
+        if (file_exists($duplicateFile)) {
+            @unlink($duplicateFile);
+        }
     }
 
     /**
@@ -33,11 +39,6 @@ class DatabaseToModelServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/database-to-model.php' => config_path('database-to-model.php'),
             ], 'database-to-model-config');
-
-            // Publish stubs
-            $this->publishes([
-                __DIR__.'/../stubs' => base_path('stubs/vendor/database-to-model'),
-            ], 'database-to-model-stubs');
         }
     }
 }

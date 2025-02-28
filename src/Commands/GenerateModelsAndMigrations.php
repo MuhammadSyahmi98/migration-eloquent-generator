@@ -40,8 +40,8 @@ class GenerateModelsAndMigrations extends Command
         $tables = $this->getTables();
 
         // Pre-create directories to avoid checking in each iteration
-        $modelPath = base_path(config('database-to-model.paths.model', 'app/Models'));
-        $migrationPath = base_path(config('database-to-model.paths.migration', 'database/migrations'));
+        $modelPath = base_path(config('database-to-model.paths.model') ?? 'app/Models');
+        $migrationPath = base_path(config('database-to-model.paths.migration') ?? 'database/migrations');
 
         if (!file_exists($modelPath)) {
             mkdir($modelPath, 0755, true);
