@@ -355,6 +355,27 @@ class GenerateModelsAndMigrations extends Command
 
         $definition = "\$table->{$columnType}('{$column}')";
 
+        // Check if this column is a foreign key
+        $isForeignKey = false;
+        $foreignKeys = $this->getForeignKeys($table);
+        foreach ($foreignKeys as $fk) {
+            if ($fk->column_name === $column) {
+                $isForeignKey = true;
+                break;
+            }
+        }
+
+        // Add unsigned for integer columns that are foreign keys
+        if ($isForeignKey && (
+            strpos($columnType, 'integer') !== false || 
+            strpos($columnType, 'bigInteger') !== false || 
+            strpos($columnType, 'smallInteger') !== false || 
+            strpos($columnType, 'mediumInteger') !== false || 
+            strpos($columnType, 'tinyInteger') !== false
+        )) {
+            $definition .= "->unsigned()";
+        }
+
         // Check if nullable
         if ($this->isNullable($table, $column)) {
             $definition .= "->nullable()";
@@ -1054,6 +1075,22 @@ class GenerateModelsAndMigrations extends Command
             $foreignKeys = $this->getForeignKeyDefinitions($table);
             if (!empty($foreignKeys)) {
                 $content .= "        Schema::table('{$table}', function (Blueprint \$table) {\n";
+                
+                // First ensure all foreign key columns are unsigned if they're integers
+                $foreignKeyColumns = $this->getForeignKeys($table);
+                foreach ($foreignKeyColumns as $fk) {
+                    $columnType = $this->getColumnType($table, $fk->column_name);
+                    if (strpos($columnType, 'integer') !== false || 
+                        strpos($columnType, 'bigInteger') !== false || 
+                        strpos($columnType, 'smallInteger') !== false || 
+                        strpos($columnType, 'mediumInteger') !== false || 
+                        strpos($columnType, 'tinyInteger') !== false) {
+                        $content .= "            DB::statement('ALTER TABLE `{$table}` MODIFY `{$fk->column_name}` {$this->getUnsignedColumnType($columnType)} " . 
+                            ($this->isNullable($table, $fk->column_name) ? "NULL" : "NOT NULL") . "');\n";
+                    }
+                }
+                
+                // Then add the foreign key constraints
                 foreach ($foreignKeys as $foreignKey) {
                     $content .= "            {$foreignKey}\n";
                 }
@@ -1084,6 +1121,24 @@ class GenerateModelsAndMigrations extends Command
         $content .= "}\n";
 
         return $content;
+    }
+
+    protected function getUnsignedColumnType($columnType)
+    {
+        switch ($columnType) {
+            case 'integer':
+                return 'INT UNSIGNED';
+            case 'bigInteger':
+                return 'BIGINT UNSIGNED';
+            case 'smallInteger':
+                return 'SMALLINT UNSIGNED';
+            case 'mediumInteger':
+                return 'MEDIUMINT UNSIGNED';
+            case 'tinyInteger':
+                return 'TINYINT UNSIGNED';
+            default:
+                return strtoupper($columnType) . ' UNSIGNED';
+        }
     }
 
     protected function isAutoIncrement($table, $column)
