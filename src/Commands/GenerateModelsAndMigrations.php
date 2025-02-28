@@ -30,13 +30,6 @@ class GenerateModelsAndMigrations extends Command
     {
         $this->connection = $this->option('connection') ?: config('database.default');
 
-        if ($this->option('ignore')) {
-            $this->ignoredTables = array_merge(
-                $this->ignoredTables,
-                explode(',', $this->option('ignore'))
-            );
-        }
-
         $tables = $this->getTables();
 
         // Pre-create directories to avoid checking in each iteration
