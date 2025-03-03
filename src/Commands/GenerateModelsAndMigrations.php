@@ -884,6 +884,11 @@ class GenerateModelsAndMigrations extends Command
         
         // Handle foreign keys (belongsTo relationships)
         foreach ($foreignKeys as $column => $reference) {
+            // Check if $reference is an object and convert to array if needed
+            if (is_object($reference)) {
+                $reference = (array) $reference;
+            }
+            
             $relatedTable = $reference['table'];
             $relatedModel = Str::studly(Str::singular($relatedTable));
             
@@ -912,6 +917,11 @@ class GenerateModelsAndMigrations extends Command
         // Handle referencing tables (hasMany relationships)
         foreach ($referencingTables as $referencingTable => $columns) {
             foreach ($columns as $column => $reference) {
+                // Check if $reference is an object and convert to array if needed
+                if (is_object($reference)) {
+                    $reference = (array) $reference;
+                }
+                
                 // Handle self-referencing relationship
                 if ($referencingTable === $table) {
                     $methodName = Str::camel(Str::plural(str_replace('_id', '', $column)));
