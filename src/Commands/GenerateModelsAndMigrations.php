@@ -915,9 +915,21 @@ class GenerateModelsAndMigrations extends Command
             
             $relatedModel = Str::studly(Str::singular($relatedTable));
             
+            // Create a meaningful method name based on the column name
+            // For columns like received_by, approved_by, etc.
+            $baseColumnName = str_replace('_id', '', $column);
+            
+            // For columns that end with _by, we want to create a more descriptive method name
+            if (Str::endsWith($baseColumnName, '_by')) {
+                // Convert received_by to receiver, approved_by to approver, etc.
+                $rolePrefix = Str::beforeLast($baseColumnName, '_by');
+                $methodName = Str::camel($rolePrefix . 'er'); // received_by -> receiver, approved_by -> approver
+            } else {
+                $methodName = Str::camel(Str::singular($baseColumnName));
+            }
+            
             // Handle self-referencing relationship
             if ($relatedTable === $table) {
-                $methodName = Str::camel(Str::singular(str_replace('_id', '', $column)));
                 $relationships[] = [
                     'type' => 'belongsTo',
                     'method' => $methodName,
@@ -926,7 +938,6 @@ class GenerateModelsAndMigrations extends Command
                     'localKey' => $relatedColumn
                 ];
             } else {
-                $methodName = Str::camel(Str::singular(str_replace('_id', '', $column)));
                 $relationships[] = [
                     'type' => 'belongsTo',
                     'method' => $methodName,
@@ -967,9 +978,20 @@ class GenerateModelsAndMigrations extends Command
                     continue; // Skip this reference
                 }
                 
+                // For inverse relationships, we need to handle special column names
+                $baseColumnName = str_replace('_id', '', $column);
+                
                 // Handle self-referencing relationship
                 if ($referencingTable === $table) {
-                    $methodName = Str::camel(Str::plural(str_replace('_id', '', $column)));
+                    // For self-referencing hasMany relationships, create appropriate method names
+                    if (Str::endsWith($baseColumnName, '_by')) {
+                        // For columns like received_by, approved_by, create methods like receivedItems, approvedItems
+                        $rolePrefix = Str::beforeLast($baseColumnName, '_by');
+                        $methodName = Str::camel($rolePrefix . 'Items'); // received_by -> receivedItems
+                    } else {
+                        $methodName = Str::camel(Str::plural($baseColumnName));
+                    }
+                    
                     $relationships[] = [
                         'type' => 'hasMany',
                         'method' => $methodName,
@@ -979,7 +1001,16 @@ class GenerateModelsAndMigrations extends Command
                     ];
                 } else {
                     $relatedModel = Str::studly(Str::singular($referencingTable));
-                    $methodName = Str::camel(Str::plural($referencingTable));
+                    
+                    // For columns like received_by, approved_by in the referencing table
+                    if (Str::endsWith($baseColumnName, '_by')) {
+                        // Create methods like receivedRecords, approvedRecords
+                        $rolePrefix = Str::beforeLast($baseColumnName, '_by');
+                        $methodName = Str::camel($rolePrefix . Str::plural(Str::studly($referencingTable)));
+                    } else {
+                        $methodName = Str::camel(Str::plural($referencingTable));
+                    }
+                    
                     $relationships[] = [
                         'type' => 'hasMany',
                         'method' => $methodName,
@@ -990,7 +1021,7 @@ class GenerateModelsAndMigrations extends Command
                 }
             }
         }
-
+        
         return $relationships;
     }
 
