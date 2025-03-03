@@ -884,12 +884,15 @@ class GenerateModelsAndMigrations extends Command
         
         // Handle foreign keys (belongsTo relationships)
         foreach ($foreignKeys as $column => $reference) {
-            // Check if $reference is an object and convert to array if needed
-            if (is_object($reference)) {
-                $reference = (array) $reference;
+            // Debug the reference structure
+            if (!isset($reference['table']) && !isset($reference->table)) {
+                $this->warn("Warning: Missing 'table' key in reference for column '$column' in table '$table'");
+                continue; // Skip this reference
             }
             
-            $relatedTable = $reference['table'];
+            // Safely access properties regardless of whether it's an object or array
+            $relatedTable = is_object($reference) ? $reference->table : $reference['table'];
+            $relatedColumn = is_object($reference) ? $reference->column : $reference['column'];
             $relatedModel = Str::studly(Str::singular($relatedTable));
             
             // Handle self-referencing relationship
@@ -900,7 +903,7 @@ class GenerateModelsAndMigrations extends Command
                     'method' => $methodName,
                     'model' => 'self',
                     'foreignKey' => $column,
-                    'localKey' => $reference['column']
+                    'localKey' => $relatedColumn
                 ];
             } else {
                 $methodName = Str::camel(Str::singular(str_replace('_id', '', $column)));
@@ -909,7 +912,7 @@ class GenerateModelsAndMigrations extends Command
                     'method' => $methodName,
                     'model' => $relatedModel,
                     'foreignKey' => $column,
-                    'localKey' => $reference['column']
+                    'localKey' => $relatedColumn
                 ];
             }
         }
@@ -917,10 +920,14 @@ class GenerateModelsAndMigrations extends Command
         // Handle referencing tables (hasMany relationships)
         foreach ($referencingTables as $referencingTable => $columns) {
             foreach ($columns as $column => $reference) {
-                // Check if $reference is an object and convert to array if needed
-                if (is_object($reference)) {
-                    $reference = (array) $reference;
+                // Debug the reference structure
+                if (!isset($reference['column']) && !isset($reference->column)) {
+                    $this->warn("Warning: Missing 'column' key in reference for column '$column' in referencing table '$referencingTable'");
+                    continue; // Skip this reference
                 }
+                
+                // Safely access properties regardless of whether it's an object or array
+                $relatedColumn = is_object($reference) ? $reference->column : $reference['column'];
                 
                 // Handle self-referencing relationship
                 if ($referencingTable === $table) {
@@ -930,7 +937,7 @@ class GenerateModelsAndMigrations extends Command
                         'method' => $methodName,
                         'model' => 'self',
                         'foreignKey' => $column,
-                        'localKey' => $reference['column']
+                        'localKey' => $relatedColumn
                     ];
                 } else {
                     $relatedModel = Str::studly(Str::singular($referencingTable));
@@ -940,7 +947,7 @@ class GenerateModelsAndMigrations extends Command
                         'method' => $methodName,
                         'model' => $relatedModel,
                         'foreignKey' => $column,
-                        'localKey' => $reference['column']
+                        'localKey' => $relatedColumn
                     ];
                 }
             }
