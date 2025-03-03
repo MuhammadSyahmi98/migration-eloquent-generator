@@ -885,14 +885,34 @@ class GenerateModelsAndMigrations extends Command
         // Handle foreign keys (belongsTo relationships)
         foreach ($foreignKeys as $column => $reference) {
             // Debug the reference structure
-            if (!isset($reference['table']) && !isset($reference->table)) {
-                $this->warn("Warning: Missing 'table' key in reference for column '$column' in table '$table'");
+            $this->info("Reference type for column '$column': " . gettype($reference));
+            
+            // Handle stdClass object
+            if (is_object($reference)) {
+                // Convert object properties to variables
+                $relatedTable = $reference->table ?? null;
+                $relatedColumn = $reference->column ?? null;
+                
+                if (!$relatedTable || !$relatedColumn) {
+                    $this->warn("Warning: Missing required properties in reference object for column '$column' in table '$table'");
+                    continue; // Skip this reference
+                }
+            } 
+            // Handle array
+            else if (is_array($reference)) {
+                if (!isset($reference['table']) || !isset($reference['column'])) {
+                    $this->warn("Warning: Missing required keys in reference array for column '$column' in table '$table'");
+                    continue; // Skip this reference
+                }
+                $relatedTable = $reference['table'];
+                $relatedColumn = $reference['column'];
+            }
+            // Handle unexpected type
+            else {
+                $this->warn("Warning: Unexpected reference type for column '$column' in table '$table': " . gettype($reference));
                 continue; // Skip this reference
             }
             
-            // Safely access properties regardless of whether it's an object or array
-            $relatedTable = is_object($reference) ? $reference->table : $reference['table'];
-            $relatedColumn = is_object($reference) ? $reference->column : $reference['column'];
             $relatedModel = Str::studly(Str::singular($relatedTable));
             
             // Handle self-referencing relationship
@@ -921,13 +941,31 @@ class GenerateModelsAndMigrations extends Command
         foreach ($referencingTables as $referencingTable => $columns) {
             foreach ($columns as $column => $reference) {
                 // Debug the reference structure
-                if (!isset($reference['column']) && !isset($reference->column)) {
-                    $this->warn("Warning: Missing 'column' key in reference for column '$column' in referencing table '$referencingTable'");
+                $this->info("Reference type for column '$column' in referencing table '$referencingTable': " . gettype($reference));
+                
+                // Handle stdClass object
+                if (is_object($reference)) {
+                    // Convert object properties to variables
+                    $relatedColumn = $reference->column ?? null;
+                    
+                    if (!$relatedColumn) {
+                        $this->warn("Warning: Missing required properties in reference object for column '$column' in referencing table '$referencingTable'");
+                        continue; // Skip this reference
+                    }
+                } 
+                // Handle array
+                else if (is_array($reference)) {
+                    if (!isset($reference['column'])) {
+                        $this->warn("Warning: Missing required keys in reference array for column '$column' in referencing table '$referencingTable'");
+                        continue; // Skip this reference
+                    }
+                    $relatedColumn = $reference['column'];
+                }
+                // Handle unexpected type
+                else {
+                    $this->warn("Warning: Unexpected reference type for column '$column' in referencing table '$referencingTable': " . gettype($reference));
                     continue; // Skip this reference
                 }
-                
-                // Safely access properties regardless of whether it's an object or array
-                $relatedColumn = is_object($reference) ? $reference->column : $reference['column'];
                 
                 // Handle self-referencing relationship
                 if ($referencingTable === $table) {
@@ -952,7 +990,7 @@ class GenerateModelsAndMigrations extends Command
                 }
             }
         }
-        
+
         return $relationships;
     }
 
