@@ -152,9 +152,20 @@ class GenerateModelsAndMigrations extends Command
         }
         $content .= "    ];\n";
 
-        // Relationships
-        if (!empty($relationships)) {
-            $content .= "\n{$relationships}\n";
+        // Add relationships
+        foreach ($relationships as $relationship) {
+            $content .= PHP_EOL . '    public function ' . $relationship['method'] . '()' . PHP_EOL . '    {' . PHP_EOL;
+            
+            if ($relationship['model'] === 'self') {
+                // Handle self-referencing relationship
+                $content .= '        return $this->' . $relationship['type'] . '(' . $modelName . '::class, \'' 
+                    . $relationship['foreignKey'] . '\', \'' . $relationship['localKey'] . '\');' . PHP_EOL;
+            } else {
+                $content .= '        return $this->' . $relationship['type'] . '(\\App\\Models\\' . $relationship['model'] 
+                    . '::class, \'' . $relationship['foreignKey'] . '\', \'' . $relationship['localKey'] . '\');' . PHP_EOL;
+            }
+            
+            $content .= '    }' . PHP_EOL;
         }
 
         $content .= "}\n";
@@ -867,34 +878,64 @@ class GenerateModelsAndMigrations extends Command
 
     protected function getRelationships($table)
     {
-        $relationships = '';
+        $relationships = [];
         $foreignKeys = $this->getForeignKeys($table);
-
-        // Add belongsTo relationships
-        foreach ($foreignKeys as $fk) {
-            $relatedModel = Str::studly(Str::singular($fk->foreign_table_name));
-            $methodName = Str::camel(Str::singular($fk->foreign_table_name));
-
-            $relationships .= "    public function {$methodName}()\n";
-            $relationships .= "    {\n";
-            $relationships .= "        return \$this->belongsTo(\\App\\Models\\{$relatedModel}::class, '{$fk->column_name}', '{$fk->foreign_column_name}');\n";
-            $relationships .= "    }\n\n";
-        }
-
-        // Add hasMany relationships (tables that reference this table)
-        $connection = DB::connection($this->connection);
         $referencingTables = $this->getReferencingTables($table);
-
-        foreach ($referencingTables as $ref) {
-            $relatedModel = Str::studly(Str::singular($ref->table_name));
-            $methodName = Str::camel(Str::plural($ref->table_name));
-
-            $relationships .= "    public function {$methodName}()\n";
-            $relationships .= "    {\n";
-            $relationships .= "        return \$this->hasMany(\\App\\Models\\{$relatedModel}::class, '{$ref->column_name}', '{$ref->foreign_column_name}');\n";
-            $relationships .= "    }\n\n";
+        
+        // Handle foreign keys (belongsTo relationships)
+        foreach ($foreignKeys as $column => $reference) {
+            $relatedTable = $reference['table'];
+            $relatedModel = Str::studly(Str::singular($relatedTable));
+            
+            // Handle self-referencing relationship
+            if ($relatedTable === $table) {
+                $methodName = Str::camel(Str::singular(str_replace('_id', '', $column)));
+                $relationships[] = [
+                    'type' => 'belongsTo',
+                    'method' => $methodName,
+                    'model' => 'self',
+                    'foreignKey' => $column,
+                    'localKey' => $reference['column']
+                ];
+            } else {
+                $methodName = Str::camel(Str::singular(str_replace('_id', '', $column)));
+                $relationships[] = [
+                    'type' => 'belongsTo',
+                    'method' => $methodName,
+                    'model' => $relatedModel,
+                    'foreignKey' => $column,
+                    'localKey' => $reference['column']
+                ];
+            }
         }
-
+        
+        // Handle referencing tables (hasMany relationships)
+        foreach ($referencingTables as $referencingTable => $columns) {
+            foreach ($columns as $column => $reference) {
+                // Handle self-referencing relationship
+                if ($referencingTable === $table) {
+                    $methodName = Str::camel(Str::plural(str_replace('_id', '', $column)));
+                    $relationships[] = [
+                        'type' => 'hasMany',
+                        'method' => $methodName,
+                        'model' => 'self',
+                        'foreignKey' => $column,
+                        'localKey' => $reference['column']
+                    ];
+                } else {
+                    $relatedModel = Str::studly(Str::singular($referencingTable));
+                    $methodName = Str::camel(Str::plural($referencingTable));
+                    $relationships[] = [
+                        'type' => 'hasMany',
+                        'method' => $methodName,
+                        'model' => $relatedModel,
+                        'foreignKey' => $column,
+                        'localKey' => $reference['column']
+                    ];
+                }
+            }
+        }
+        
         return $relationships;
     }
 
