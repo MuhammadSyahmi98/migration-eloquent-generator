@@ -152,20 +152,9 @@ class GenerateModelsAndMigrations extends Command
         }
         $content .= "    ];\n";
 
-        // Add relationships
-        foreach ($relationships as $relationship) {
-            $content .= PHP_EOL . '    public function ' . $relationship['method'] . '()' . PHP_EOL . '    {' . PHP_EOL;
-            
-            if ($relationship['model'] === 'self') {
-                // Handle self-referencing relationship
-                $content .= '        return $this->' . $relationship['type'] . '(' . $modelName . '::class, \'' 
-                    . $relationship['foreignKey'] . '\', \'' . $relationship['localKey'] . '\');' . PHP_EOL;
-            } else {
-                $content .= '        return $this->' . $relationship['type'] . '(\\App\\Models\\' . $relationship['model'] 
-                    . '::class, \'' . $relationship['foreignKey'] . '\', \'' . $relationship['localKey'] . '\');' . PHP_EOL;
-            }
-            
-            $content .= '    }' . PHP_EOL;
+        // Relationships
+        if (!empty($relationships)) {
+            $content .= "\n{$relationships}\n";
         }
 
         $content .= "}\n";
@@ -378,10 +367,10 @@ class GenerateModelsAndMigrations extends Command
 
         // Add unsigned for integer columns that are foreign keys
         if ($isForeignKey && (
-            strpos($columnType, 'integer') !== false || 
-            strpos($columnType, 'bigInteger') !== false || 
-            strpos($columnType, 'smallInteger') !== false || 
-            strpos($columnType, 'mediumInteger') !== false || 
+            strpos($columnType, 'integer') !== false ||
+            strpos($columnType, 'bigInteger') !== false ||
+            strpos($columnType, 'smallInteger') !== false ||
+            strpos($columnType, 'mediumInteger') !== false ||
             strpos($columnType, 'tinyInteger') !== false
         )) {
             $definition .= "->unsigned()";
@@ -878,150 +867,80 @@ class GenerateModelsAndMigrations extends Command
 
     protected function getRelationships($table)
     {
-        $relationships = [];
+        $relationships = '';
         $foreignKeys = $this->getForeignKeys($table);
-        $referencingTables = $this->getReferencingTables($table);
-        
-        // Handle foreign keys (belongsTo relationships)
-        foreach ($foreignKeys as $column => $reference) {
-            // Debug the reference structure
-            $this->info("Reference type for column '$column': " . gettype($reference));
-            
-            // Handle stdClass object
-            if (is_object($reference)) {
-                // Convert object properties to variables
-                $relatedTable = $reference->table ?? null;
-                $relatedColumn = $reference->column ?? null;
-                
-                if (!$relatedTable || !$relatedColumn) {
-                    $this->warn("Warning: Missing required properties in reference object for column '$column' in table '$table'");
-                    continue; // Skip this reference
-                }
-            } 
-            // Handle array
-            else if (is_array($reference)) {
-                if (!isset($reference['table']) || !isset($reference['column'])) {
-                    $this->warn("Warning: Missing required keys in reference array for column '$column' in table '$table'");
-                    continue; // Skip this reference
-                }
-                $relatedTable = $reference['table'];
-                $relatedColumn = $reference['column'];
-            }
-            // Handle unexpected type
-            else {
-                $this->warn("Warning: Unexpected reference type for column '$column' in table '$table': " . gettype($reference));
-                continue; // Skip this reference
-            }
-            
-            $relatedModel = Str::studly(Str::singular($relatedTable));
-            
-            // Create a meaningful method name based on the column name
-            // For columns like received_by, approved_by, etc.
-            $baseColumnName = str_replace('_id', '', $column);
-            
-            // For columns that end with _by, we want to create a more descriptive method name
-            if (Str::endsWith($baseColumnName, '_by')) {
-                // Convert received_by to receiver, approved_by to approver, etc.
-                $rolePrefix = Str::beforeLast($baseColumnName, '_by');
-                $methodName = Str::camel($rolePrefix . 'er'); // received_by -> receiver, approved_by -> approver
-            } else {
-                $methodName = Str::camel(Str::singular($baseColumnName));
-            }
-            
-            // Handle self-referencing relationship
-            if ($relatedTable === $table) {
-                $relationships[] = [
-                    'type' => 'belongsTo',
-                    'method' => $methodName,
-                    'model' => 'self',
-                    'foreignKey' => $column,
-                    'localKey' => $relatedColumn
-                ];
-            } else {
-                $relationships[] = [
-                    'type' => 'belongsTo',
-                    'method' => $methodName,
-                    'model' => $relatedModel,
-                    'foreignKey' => $column,
-                    'localKey' => $relatedColumn
-                ];
-            }
-        }
-        
-        // Handle referencing tables (hasMany relationships)
-        foreach ($referencingTables as $referencingTable => $columns) {
-            foreach ($columns as $column => $reference) {
-                // Debug the reference structure
-                $this->info("Reference type for column '$column' in referencing table '$referencingTable': " . gettype($reference));
-                
-                // Handle stdClass object
-                if (is_object($reference)) {
-                    // Convert object properties to variables
-                    $relatedColumn = $reference->column ?? null;
-                    
-                    if (!$relatedColumn) {
-                        $this->warn("Warning: Missing required properties in reference object for column '$column' in referencing table '$referencingTable'");
-                        continue; // Skip this reference
-                    }
-                } 
-                // Handle array
-                else if (is_array($reference)) {
-                    if (!isset($reference['column'])) {
-                        $this->warn("Warning: Missing required keys in reference array for column '$column' in referencing table '$referencingTable'");
-                        continue; // Skip this reference
-                    }
-                    $relatedColumn = $reference['column'];
-                }
-                // Handle unexpected type
-                else {
-                    $this->warn("Warning: Unexpected reference type for column '$column' in referencing table '$referencingTable': " . gettype($reference));
-                    continue; // Skip this reference
-                }
-                
-                // For inverse relationships, we need to handle special column names
-                $baseColumnName = str_replace('_id', '', $column);
-                
-                // Handle self-referencing relationship
-                if ($referencingTable === $table) {
-                    // For self-referencing hasMany relationships, create appropriate method names
-                    if (Str::endsWith($baseColumnName, '_by')) {
-                        // For columns like received_by, approved_by, create methods like receivedItems, approvedItems
-                        $rolePrefix = Str::beforeLast($baseColumnName, '_by');
-                        $methodName = Str::camel($rolePrefix . 'Items'); // received_by -> receivedItems
-                    } else {
-                        $methodName = Str::camel(Str::plural($baseColumnName));
-                    }
-                    
-                    $relationships[] = [
-                        'type' => 'hasMany',
-                        'method' => $methodName,
-                        'model' => 'self',
-                        'foreignKey' => $column,
-                        'localKey' => $relatedColumn
-                    ];
+
+        // Track used method names to avoid duplicates
+        $usedMethodNames = [];
+
+        // Add belongsTo relationships
+        foreach ($foreignKeys as $fk) {
+            $relatedModel = Str::studly(Str::singular($fk->foreign_table_name));
+            $baseMethodName = Str::camel(Str::singular($fk->foreign_table_name));
+            $methodName = $baseMethodName;
+
+            // If this method name is already used, append the column name to make it unique
+            if (in_array($methodName, $usedMethodNames)) {
+                $columnNamePart = Str::studly($fk->column_name);
+                // Remove any reference to the related table in the column name to avoid redundancy
+                $columnNamePart = str_replace(Str::studly(Str::singular($fk->foreign_table_name)), '', $columnNamePart);
+                $columnNamePart = str_replace('Id', '', $columnNamePart); // Remove 'Id' suffix if present
+
+                // If after cleaning up we have something to append, use it
+                if (!empty($columnNamePart)) {
+                    $methodName = $baseMethodName . 'By' . $columnNamePart;
                 } else {
-                    $relatedModel = Str::studly(Str::singular($referencingTable));
-                    
-                    // For columns like received_by, approved_by in the referencing table
-                    if (Str::endsWith($baseColumnName, '_by')) {
-                        // Create methods like receivedRecords, approvedRecords
-                        $rolePrefix = Str::beforeLast($baseColumnName, '_by');
-                        $methodName = Str::camel($rolePrefix . Str::plural(Str::studly($referencingTable)));
-                    } else {
-                        $methodName = Str::camel(Str::plural($referencingTable));
-                    }
-                    
-                    $relationships[] = [
-                        'type' => 'hasMany',
-                        'method' => $methodName,
-                        'model' => $relatedModel,
-                        'foreignKey' => $column,
-                        'localKey' => $relatedColumn
-                    ];
+                    // Otherwise, just append the full column name
+                    $methodName = $baseMethodName . 'By' . Str::studly($fk->column_name);
                 }
             }
+
+            // Add to used method names
+            $usedMethodNames[] = $methodName;
+
+            $relationships .= "    public function {$methodName}()\n";
+            $relationships .= "    {\n";
+            $relationships .= "        return \$this->belongsTo(\\App\\Models\\{$relatedModel}::class, '{$fk->column_name}', '{$fk->foreign_column_name}');\n";
+            $relationships .= "    }\n\n";
         }
-        
+
+        // Reset used method names for hasMany relationships
+        $usedMethodNames = [];
+
+        // Add hasMany relationships (tables that reference this table)
+        $connection = DB::connection($this->connection);
+        $referencingTables = $this->getReferencingTables($table);
+
+        foreach ($referencingTables as $ref) {
+            $relatedModel = Str::studly(Str::singular($ref->table_name));
+            $baseMethodName = Str::camel(Str::plural($ref->table_name));
+            $methodName = $baseMethodName;
+
+            // If this method name is already used, append the column name to make it unique
+            if (in_array($methodName, $usedMethodNames)) {
+                $columnNamePart = Str::studly($ref->column_name);
+                // Remove any reference to the current table in the column name to avoid redundancy
+                $columnNamePart = str_replace(Str::studly(Str::singular($table)), '', $columnNamePart);
+                $columnNamePart = str_replace('Id', '', $columnNamePart); // Remove 'Id' suffix if present
+
+                // If after cleaning up we have something to append, use it
+                if (!empty($columnNamePart)) {
+                    $methodName = $baseMethodName . 'By' . $columnNamePart;
+                } else {
+                    // Otherwise, just append the full column name
+                    $methodName = $baseMethodName . 'By' . Str::studly($ref->column_name);
+                }
+            }
+
+            // Add to used method names
+            $usedMethodNames[] = $methodName;
+
+            $relationships .= "    public function {$methodName}()\n";
+            $relationships .= "    {\n";
+            $relationships .= "        return \$this->hasMany(\\App\\Models\\{$relatedModel}::class, '{$ref->column_name}', '{$ref->foreign_column_name}');\n";
+            $relationships .= "    }\n\n";
+        }
+
         return $relationships;
     }
 
@@ -1202,21 +1121,21 @@ class GenerateModelsAndMigrations extends Command
             $foreignKeys = $this->getForeignKeyDefinitions($table);
             if (!empty($foreignKeys)) {
                 $content .= "        Schema::table('{$table}', function (Blueprint \$table) {\n";
-                
+
                 // First ensure all foreign key columns are unsigned if they're integers
                 $foreignKeyColumns = $this->getForeignKeys($table);
                 foreach ($foreignKeyColumns as $fk) {
                     $columnType = $this->getColumnType($table, $fk->column_name);
-                    if (strpos($columnType, 'integer') !== false || 
-                        strpos($columnType, 'bigInteger') !== false || 
-                        strpos($columnType, 'smallInteger') !== false || 
-                        strpos($columnType, 'mediumInteger') !== false || 
+                    if (strpos($columnType, 'integer') !== false ||
+                        strpos($columnType, 'bigInteger') !== false ||
+                        strpos($columnType, 'smallInteger') !== false ||
+                        strpos($columnType, 'mediumInteger') !== false ||
                         strpos($columnType, 'tinyInteger') !== false) {
-                        $content .= "            DB::statement('ALTER TABLE `{$table}` MODIFY `{$fk->column_name}` {$this->getUnsignedColumnType($columnType)} " . 
+                        $content .= "            DB::statement('ALTER TABLE `{$table}` MODIFY `{$fk->column_name}` {$this->getUnsignedColumnType($columnType)} " .
                             ($this->isNullable($table, $fk->column_name) ? "NULL" : "NOT NULL") . "');\n";
                     }
                 }
-                
+
                 // Then add the foreign key constraints
                 foreach ($foreignKeys as $foreignKey) {
                     $content .= "            {$foreignKey}\n";
